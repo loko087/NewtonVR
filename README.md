@@ -20,4 +20,9 @@ We've also created a few physical UI elements to help with basic configuration a
 <br>
 NewtonVR brought to you by [Tomorrow Today Labs](http://www.tomorrowtodaylabs.com):
 
-**Development:** Keith Bradner, Nick Abel<br>**Interaction Design:** Adrienne Hunter<br>**Modeling:** Wesley Eldridge, Carli Wood<br>**Audio:** Joshua Du Chene
+**Development:** Keith Bradner, Nick Abel, Amanda End<br>**Interaction Design:** Adrienne Hunter<br>**Modeling:** Wesley Eldridge, Carli Wood<br>**Audio:** Joshua Du Chene
+
+
+<br>
+Windows Mixed Reality support by:
+[@Jesseric](https://twitter.com/jerressic) and ([@meulta](https://twitter.com/meulta))

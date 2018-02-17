@@ -29,6 +29,7 @@ namespace NewtonVR
     {
         private const string SteamVRDefine = "NVR_SteamVR";
         private const string OculusDefine = "NVR_Oculus";
+        private const string WindowsMRDefine = "NVR_WindowsMR";
 
         private static bool hasReloaded = false;
         private static bool waitingForReload = false;
@@ -36,28 +37,40 @@ namespace NewtonVR
 
         private static bool hasOculusSDK = false;
         private static bool hasSteamVR = false;
+        private static bool hasWindowsMR = false;
         private static bool hasOculusSDKDefine = false;
         private static bool hasSteamVRDefine = false;
-
+        private static bool hasWindowsMRDefine = false;
         private static string progressBarMessage = null;
 
         private static string CheckForUpdatesKey = "NewtonVRCheckForUpdates";
+
+        private static string addingDefine;
+
+        private static string AddingDefineKey = "NVR_addingDefine";
 
         [DidReloadScripts]
         private static void DidReloadScripts()
         {
             hasReloaded = true;
-
+            
             hasOculusSDK = DoesTypeExist("OVRInput");
 
             hasSteamVR = DoesTypeExist("SteamVR");
+
+            hasWindowsMR = DoesTypeExist("HoloToolkit.Unity.InputModule.BaseInputSource", true);
 
             string scriptingDefine = PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup.Standalone);
             string[] scriptingDefines = scriptingDefine.Split(';');
             hasOculusSDKDefine = scriptingDefines.Contains(OculusDefine);
             hasSteamVRDefine = scriptingDefines.Contains(SteamVRDefine);
 
+            scriptingDefine = PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup.WSA);
+            scriptingDefines = scriptingDefine.Split(';');
+            hasWindowsMRDefine = scriptingDefines.Contains(WindowsMRDefine);
+
             waitingForReload = false;
+
             ClearProgressBar();
 
             if (PlayerPrefs.HasKey(CheckForUpdatesKey) == false || PlayerPrefs.GetInt(CheckForUpdatesKey) == 1)
@@ -65,6 +78,16 @@ namespace NewtonVR
                 Thread thread = new Thread(new ThreadStart(CheckForUpdate));
                 thread.Start();
             }
+
+            
+            if (PlayerPrefs.GetString(AddingDefineKey, string.Empty) == WindowsMRDefine)
+            {
+#if NVR_WindowsMR
+                HoloToolkit.Unity.AutoConfigureMenu.ShowProjectSettingsWindow();
+                Debug.Log("[NewtonVR] Showing auto configuration dialog for Windows MR. If you have a Windows MR headset, select \"Support occluded devices\"");
+#endif
+            }
+            PlayerPrefs.SetString(AddingDefineKey, string.Empty);
         }
 
         private static void CheckForUpdate() //turn this off in NVRPlayer inspector under NotifyOnVersionUpdate.
@@ -90,12 +113,23 @@ namespace NewtonVR
             }
         }
 
-        private static bool DoesTypeExist(string className)
+        private static bool DoesTypeExist(string className, bool fullname = false)
         {
-            var foundType = (from assembly in AppDomain.CurrentDomain.GetAssemblies()
-                        from type in assembly.GetTypes()
-                        where type.Name == className
-                        select type).FirstOrDefault();
+            Type foundType = null;
+            if (fullname)
+            {
+                foundType = (from assembly in AppDomain.CurrentDomain.GetAssemblies()
+                                 from type in assembly.GetTypes()
+                                 where type.FullName == className
+                                 select type).FirstOrDefault();
+            }
+            else
+            {
+                foundType = (from assembly in AppDomain.CurrentDomain.GetAssemblies()
+                                 from type in assembly.GetTypes()
+                                 where type.Name == className
+                                 select type).FirstOrDefault();
+            }
 
             return foundType != null;
         }
@@ -106,33 +140,53 @@ namespace NewtonVR
             waitingForReload = true;
             startedWaitingForReload = DateTime.Now;
 
-            string scriptingDefine = PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup.Standalone);
+            if (define == WindowsMRDefine)
+            {
+                RemoveDefine(define, BuildTargetGroup.WSA);
+            }
+
+            RemoveDefine(define, BuildTargetGroup.Standalone);
+        }
+
+        private void RemoveDefine(string define, BuildTargetGroup group)
+        {
+            string scriptingDefine = PlayerSettings.GetScriptingDefineSymbolsForGroup(group);
             string[] scriptingDefines = scriptingDefine.Split(';');
             List<string> listDefines = scriptingDefines.ToList();
             listDefines.Remove(define);
 
             string newDefines = string.Join(";", listDefines.ToArray());
-            PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.Standalone, newDefines);
+            PlayerSettings.SetScriptingDefineSymbolsForGroup(group, newDefines);
         }
 
         private void AddDefine(string define)
         {
             DisplayProgressBar("Setting up support for " + define);
+            PlayerPrefs.SetString(AddingDefineKey, define);
             waitingForReload = true;
             startedWaitingForReload = DateTime.Now;
 
-            string scriptingDefine = PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup.Standalone);
-            string[] scriptingDefines = scriptingDefine.Split(';');
-            List<string> listDefines = scriptingDefines.ToList();
-            listDefines.Add(define);
+            if (define == WindowsMRDefine)
+                AddDefineToGroup(define, BuildTargetGroup.WSA);
 
-            string newDefines = string.Join(";", listDefines.ToArray());
-            PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.Standalone, newDefines);
+            AddDefineToGroup(define, BuildTargetGroup.Standalone);
 
             if (PlayerSettings.virtualRealitySupported == false)
             {
                 PlayerSettings.virtualRealitySupported = true;
             }
+        }
+
+        private void AddDefineToGroup(string define, BuildTargetGroup group)
+        {
+            string scriptingDefine = PlayerSettings.GetScriptingDefineSymbolsForGroup(group);
+
+            string[] scriptingDefines = scriptingDefine.Split(';');
+            List<string> listDefines = scriptingDefines.ToList();
+            listDefines.Add(define);
+
+            string newDefines = string.Join(";", listDefines.ToArray());
+            PlayerSettings.SetScriptingDefineSymbolsForGroup(group, newDefines);
         }
 
         private static void DisplayProgressBar(string newMessage = null)
@@ -181,11 +235,14 @@ namespace NewtonVR
 
             player.OculusSDKEnabled = hasOculusSDKDefine;
             player.SteamVREnabled = hasSteamVRDefine;
+            player.WindowsMREnabled = hasWindowsMRDefine;
 
             bool installSteamVR = false;
             bool installOculusSDK = false;
+            bool installWindowsMR = false;
             bool enableSteamVR = player.SteamVREnabled;
             bool enableOculusSDK = player.OculusSDKEnabled;
+            bool enableWindowsMR = player.WindowsMREnabled;
             
             EditorGUILayout.BeginHorizontal();
             if (hasSteamVR == false)
@@ -216,7 +273,20 @@ namespace NewtonVR
                 enableOculusSDK = EditorGUILayout.Toggle("Enable Oculus SDK", player.OculusSDKEnabled);
             }
             EditorGUILayout.EndHorizontal();
-
+            EditorGUILayout.BeginHorizontal();
+            if (hasWindowsMR == false)
+            {
+                using (new EditorGUI.DisabledScope(hasWindowsMR == false))
+                {
+                    EditorGUILayout.Toggle("Enable Windows MR", player.WindowsMREnabled);
+                }
+                installWindowsMR = GUILayout.Button("Install Windows MR");
+            }
+            else
+            {
+                enableWindowsMR = EditorGUILayout.Toggle("Enable Windows MR", player.WindowsMREnabled);
+            }
+            EditorGUILayout.EndHorizontal();
 
             GUILayout.Space(10);
 
@@ -345,6 +415,15 @@ namespace NewtonVR
                 AddDefine(OculusDefine);
             }
 
+            if (enableWindowsMR == false && player.WindowsMREnabled == true)
+            {
+                RemoveDefine(WindowsMRDefine);
+            }
+            else if (enableWindowsMR == true && player.WindowsMREnabled == false)
+            {
+                AddDefine(WindowsMRDefine);
+            }
+
             if (installOculusSDK == true)
             {
                 Application.OpenURL("https://developer.oculus.com/downloads/package/oculus-utilities-for-unity-5/");
@@ -353,6 +432,11 @@ namespace NewtonVR
             if (installSteamVR == true)
             {
                 Application.OpenURL("com.unity3d.kharma:content/32647");
+            }
+
+            if (installWindowsMR == true)
+            {
+                Application.OpenURL("https://github.com/Microsoft/MixedRealityToolkit-Unity/tree/master/External/Unitypackages");
             }
 
             DrawDefaultInspector();
